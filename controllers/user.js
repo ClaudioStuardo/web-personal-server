@@ -1,4 +1,7 @@
+const fs = require('fs');
+const path = require('path');
 const bcrypt = require("bcrypt-nodejs");
+const jwt = require("../services/jwt");
 const User = require("../models/user");
 
 function signUp(req, res) {
@@ -7,12 +10,10 @@ function signUp(req, res) {
     const { name, lastname, email, password, repeatPassword } = req.body;
     user.name = name;
     user.lastname = lastname;
-    user.email = email;
+    user.email = email.toLowerCase();
     user.role = "admin";
     user.active = false;
 
-    console.log(req.body);
-  
     if (!password || !repeatPassword) {
       res.status(404).send({ message: "Las contraseñas son obligatorias." });
     } else {
@@ -39,8 +40,108 @@ function signUp(req, res) {
         });
       }
     }
-  }
+}
+
+function signIn(req, res) {
+  const params = req.body;
+  const email = params.email.toLowerCase();
+  const password = params.password;
+
+  User.findOne({email}, (err, userStored) => {
+    if (err) {
+      res.status(500).send({message: "Error del servidor"});
+    } else {
+      if (!userStored) {
+        res.status(404).send({message: "Usuario no encontrado"});
+      } else {
+        bcrypt.compare(password, userStored.password, (err, check) => {
+          if (err) {
+            res.status(500).send({message: "Error del servidor"});
+          } else if (!check) {
+            res.status(404).send({message: "Email o contraseña incorrecta"});
+          } else {
+            if (!userStored.active) {
+              res.status(200).send({code: 200, message: "El usuario no está activo"});
+            } else {
+              res.status(200).send({
+                accessToken: jwt.createAccessToken(userStored),
+                refreshToken: jwt.createRefreshToken(userStored)
+              });
+            }
+          }
+        });
+      }
+    }
+  });
+}
+
+function getUsers(req, res) {
+  User.find().then(users => {
+    if (!users) {
+      res.status(404).send({message: "No se ha encontrado ningún usuario"});
+    } else {
+      res.status(200).send({users});
+    }
+  })
+}
+
+function getUsersActive(req, res) {
+  const query = req.query;
+
+  User.find({active : query.active}).then(users => {
+    if (!users) {
+      res.status(404).send({message: "No se ha encontrado ningún usuario"});
+    } else {
+      res.status(200).send({users});
+    }
+  })
+}
+
+function uploadAvatar(req, res) {
+  const params = req.params;
+
+  User.findById({ _id: params.id }, (err, userData) => {
+    if (err) {
+      res.status(500).send({ message: "Error del servidor." });
+    } else {
+      if (!userData) {
+        res.status(404).send({ message: "Nose ha encontrado ningun usuario." });
+      } else {
+        let user = userData;
+
+        if (req.files) {
+          let filePath = req.files.avatar.path;
+          let fileName = filePath.replace(/^.*[\\\/]/, "");
+          let extSplit = fileName.split(".");
+          let fileExt = extSplit[1];
+
+          if (fileExt !== "png" && fileExt !== "jpg") {
+            res.status(400).send({message:"La extension de la imagen no es valida. (Extensiones permitidas: .png y .jpg)"});
+          } else {
+            user.avatar = fileName;
+            User.findByIdAndUpdate({ _id: params.id }, user, (err, userResult) => {
+                if (err) {
+                  res.status(500).send({ message: "Error del servidor." });
+                } else {
+                  if (!userResult) {
+                    res.status(404).send({ message: "No se ha encontrado ningun usuario." });
+                  } else {
+                    res.status(200).send({ avatarName: fileName });
+                  }
+                }
+              }
+            );
+          }
+        }
+      }
+    }
+  });
+}
 
 module.exports = {
-    signUp
+    signUp,
+    signIn,
+    getUsers,
+    getUsersActive,
+    uploadAvatar
 };
