@@ -11,6 +11,9 @@ const api = express.Router();
 api.post("/sign-in", UserController.signIn);
 api.post("/sign-up", UserController.signUp);
 
+// Admin
+api.post("/sign-up-admin", [md_auth.ensureAuth], UserController.signUpAdmin);
+
 // User
 api.get("/users", [md_auth.ensureAuth], UserController.getUsers);
 api.get("/users-active", [md_auth.ensureAuth], UserController.getUsersActive);
